@@ -1,0 +1,12 @@
+# scraped datasets (too large for git; push to HF instead)
+african_bible_parallel_text_datasets/
+pivots/
+hf_build/
+
+# logs and pilot files
+*.log
+pilot_versions.csv
+
+# python
+__pycache__/
+*.pyc
