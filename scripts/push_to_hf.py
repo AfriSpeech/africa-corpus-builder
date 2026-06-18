@@ -118,6 +118,18 @@ def main():
         folder_path=DATA_ROOT,
         allow_patterns=to_upload,
     )
+
+    card = os.path.join(REPO_ROOT, "hf_dataset_card.md")
+    if os.path.exists(card):
+        api.upload_file(
+            path_or_fileobj=card,
+            path_in_repo="README.md",
+            repo_id=repo_id,
+            repo_type=HF_REPO_TYPE,
+            commit_message="Update dataset card",
+        )
+        print("Dataset card updated.")
+
     print(f"\nDone: https://huggingface.co/datasets/{repo_id}")
 
 
