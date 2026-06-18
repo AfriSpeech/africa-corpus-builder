@@ -9,19 +9,20 @@ Produces two Hugging Face datasets, each with ONE config (subset) per language:
 
   1. PARALLEL  ({namespace}/african-bible-parallel)
        columns: verse_key, lang_code, local, en, fr, ar, zh, pt
-       Multiple versions of the same language are combined and deduped on
-       (verse_key, local).  A row is kept when it has local text AND at least
-       the English pivot (the anchor); fr/ar/zh/pt are filled where available.
 
   2. MONOLINGUAL  ({namespace}/african-bible-monolingual)
-       One config per African language: columns  verse_key, text   (local only),
-       deduped on text.  Plus an extra `eng` config with the English pivot text.
+       One config per African language (local text only) + an `eng` config.
+
+Strategy to avoid HF rate limits (128 commits/hour):
+  Phase 1 — build all parquet files locally (no API calls, resumable)
+  Phase 2 — upload each repo in ONE bulk commit via upload_large_folder
 
 Usage:
-    python build_and_push_hf.py --dry-run                 # build locally, no upload
-    python build_and_push_hf.py                           # build + push (needs HF token)
-    python build_and_push_hf.py --namespace afrispeech
-    python build_and_push_hf.py --langs twi ewe gaa       # only these languages
+    python build_and_push_hf.py --build-only      # phase 1: build parquets locally
+    python build_and_push_hf.py --push-only        # phase 2: upload (needs HF login)
+    python build_and_push_hf.py                    # both phases
+    python build_and_push_hf.py --namespace michsethowusu
+    python build_and_push_hf.py --langs twi ewe    # only these languages
     python build_and_push_hf.py --private
 
 Auth: set env HF_TOKEN, or run `huggingface-cli login` first.
@@ -47,27 +48,42 @@ _ensure(["pandas", "datasets", "huggingface_hub"])
 
 import argparse
 import csv
+import json
 import os
-from collections import defaultdict
 
 import pandas as pd
 
-LOCAL_ROOT   = "./african_bible_parallel_text_datasets"
-PIVOT_DIR    = "./pivots"
-VERSIONS_CSV = "youversion_africa_versions.csv"
-BUILD_DIR    = "./hf_build"
-PIVOT_LANGS  = ["en", "fr", "ar", "zh", "pt"]
+LOCAL_ROOT    = "./african_bible_parallel_text_datasets"
+PIVOT_DIR     = "./pivots"
+VERSIONS_CSV  = "youversion_africa_versions.csv"
+BUILD_DIR     = "./hf_build"
+BUILD_PROGRESS = "./build_progress.json"
+PIVOT_LANGS   = ["en", "fr", "ar", "zh", "pt"]
 
 csv.field_size_limit(10**7)
 
 
 # ─────────────────────────────────────────────
-# LOAD
+# BUILD PROGRESS  (resume phase 1)
+# ─────────────────────────────────────────────
+
+def load_build_progress():
+    if os.path.exists(BUILD_PROGRESS):
+        return json.load(open(BUILD_PROGRESS))
+    return {"parallel": [], "monolingual": []}
+
+def save_build_progress(prog):
+    tmp = BUILD_PROGRESS + ".tmp"
+    json.dump(prog, open(tmp, "w"))
+    os.replace(tmp, BUILD_PROGRESS)
+
+
+# ─────────────────────────────────────────────
+# METADATA & PIVOTS
 # ─────────────────────────────────────────────
 
 def load_versions_meta(path):
-    """version_id -> (lang_code, lang_name);  lang_code -> lang_name."""
-    by_id, lang_name = {}, {}
+    by_lang = {}
     with open(path, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             vid = (row.get("version_id") or "").strip()
@@ -75,9 +91,8 @@ def load_versions_meta(path):
                 continue
             code = (row["lang_code"] or "").strip()
             name = (row["lang_name"] or "").strip()
-            by_id[int(vid)] = (code, name)
-            lang_name.setdefault(code, name)
-    return by_id, lang_name
+            by_lang.setdefault(code, []).append((int(vid), name))
+    return by_lang
 
 
 def lang_csv_name(lang_name, lang_code, version_num):
@@ -94,98 +109,198 @@ def load_pivots():
                 for r in csv.DictReader(f):
                     d[r["verse_key"]] = r["text"]
         pivots[lang] = d
-        print(f"  pivot {lang}: {len(d)} verses")
+        print(f"  pivot {lang}: {len(d):,} verses")
     return pivots
 
 
-def collect_local_rows(by_id, langs_filter):
-    """lang_code -> list of (verse_key, local) across all that language's versions."""
-    rows = defaultdict(list)
-    for vid, (code, name) in by_id.items():
-        if langs_filter and code not in langs_filter:
-            continue
-        path = os.path.join(LOCAL_ROOT, lang_csv_name(name, code, vid))
+# ─────────────────────────────────────────────
+# PER-LANGUAGE BUILD
+# ─────────────────────────────────────────────
+
+def load_local_for_lang(lang_code, versions):
+    rows = []
+    for vid, lname in versions:
+        path = os.path.join(LOCAL_ROOT, lang_csv_name(lname, lang_code, vid))
         if not os.path.exists(path):
             continue
         with open(path, newline="", encoding="utf-8") as f:
             for r in csv.DictReader(f):
                 local = (r.get("local") or "").strip()
                 if local:
-                    rows[code].append((r["verse_key"], local))
+                    rows.append((r["verse_key"], local))
     return rows
 
 
-# ─────────────────────────────────────────────
-# BUILD
-# ─────────────────────────────────────────────
-
-def build_parallel(local_rows, pivots):
-    """lang_code -> DataFrame[verse_key, lang_code, local, en, fr, ar, zh, pt]."""
-    out = {}
+def build_parallel_df(lang_code, pairs, pivots):
     en = pivots["en"]
-    for code, pairs in local_rows.items():
-        seen, recs = set(), []
-        for vk, local in pairs:
-            if (vk, local) in seen:
-                continue
-            seen.add((vk, local))
-            if vk not in en:                      # anchor: require English
-                continue
-            recs.append({
-                "verse_key": vk, "lang_code": code, "local": local,
-                "en": en.get(vk, ""), "fr": pivots["fr"].get(vk, ""),
-                "ar": pivots["ar"].get(vk, ""), "zh": pivots["zh"].get(vk, ""),
-                "pt": pivots["pt"].get(vk, ""),
-            })
-        if recs:
-            out[code] = pd.DataFrame.from_records(recs)
-    return out
+    seen, recs = set(), []
+    for vk, local in pairs:
+        if (vk, local) in seen:
+            continue
+        seen.add((vk, local))
+        if vk not in en:
+            continue
+        recs.append({
+            "verse_key": vk, "lang_code": lang_code, "local": local,
+            "en": en.get(vk, ""), "fr": pivots["fr"].get(vk, ""),
+            "ar": pivots["ar"].get(vk, ""), "zh": pivots["zh"].get(vk, ""),
+            "pt": pivots["pt"].get(vk, ""),
+        })
+    return pd.DataFrame.from_records(recs) if recs else None
 
 
-def build_monolingual(local_rows, pivots):
-    """lang_code -> DataFrame[verse_key, text]  (deduped on text); plus 'eng'."""
-    out = {}
-    for code, pairs in local_rows.items():
-        seen, recs = set(), []
-        for vk, local in pairs:
-            if local in seen:
-                continue
-            seen.add(local)
-            recs.append({"verse_key": vk, "text": local})
-        if recs:
-            out[code] = pd.DataFrame.from_records(recs)
-    en = pivots["en"]
-    if en:
-        out["eng"] = pd.DataFrame(
-            [{"verse_key": k, "text": v} for k, v in en.items() if v]
-        )
-    return out
+def build_mono_df(pairs):
+    seen, recs = set(), []
+    for vk, local in pairs:
+        if local in seen:
+            continue
+        seen.add(local)
+        recs.append({"verse_key": vk, "text": local})
+    return pd.DataFrame.from_records(recs) if recs else None
 
 
 # ─────────────────────────────────────────────
-# OUTPUT
+# PARQUET PATH HELPERS
+# HF datasets expects: data/{config_name}/train-*.parquet
 # ─────────────────────────────────────────────
 
-def write_local(frames, subdir):
-    base = os.path.join(BUILD_DIR, subdir)
-    os.makedirs(base, exist_ok=True)
-    total = 0
-    for cfg, df in frames.items():
-        df.to_parquet(os.path.join(base, f"{cfg}.parquet"), index=False)
-        total += len(df)
-    print(f"  wrote {len(frames)} configs / {total} rows -> {base}")
+def parquet_path(dataset, config):
+    return os.path.join(BUILD_DIR, dataset, "data", config, "train-00000-of-00001.parquet")
+
+def parquet_exists(dataset, config):
+    return os.path.exists(parquet_path(dataset, config))
+
+def write_parquet(df, dataset, config):
+    path = parquet_path(dataset, config)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    df.to_parquet(path, index=False)
 
 
-def push(frames, repo_id, private):
-    from datasets import Dataset
+# ─────────────────────────────────────────────
+# DATASET CARD
+# ─────────────────────────────────────────────
+
+def write_dataset_card(dataset_dir, repo_id, configs, description):
+    configs_yaml = "\n".join(
+        f"  - config_name: {c}\n    data_files:\n      - split: train\n        path: data/{c}/train-*.parquet"
+        for c in sorted(configs)
+    )
+    card = f"""---
+configs:
+{configs_yaml}
+---
+
+# {repo_id.split('/')[-1]}
+
+{description}
+
+**Configs (subsets):** {len(configs)} languages/variants.
+
+Built with [africa-mt-builder](https://github.com/AfriSpeech/africa-mt-builder).
+"""
+    with open(os.path.join(dataset_dir, "README.md"), "w", encoding="utf-8") as f:
+        f.write(card)
+
+
+# ─────────────────────────────────────────────
+# PHASE 1 — BUILD PARQUETS LOCALLY
+# ─────────────────────────────────────────────
+
+def phase_build(by_lang, pivots, langs_filter, prog):
+    all_langs = sorted(by_lang.keys())
+    if langs_filter:
+        all_langs = [l for l in all_langs if l in langs_filter]
+    total = len(all_langs)
+
+    # English monolingual
+    if "eng" not in prog["monolingual"]:
+        en = pivots["en"]
+        if en:
+            df = pd.DataFrame([{"verse_key": k, "text": v} for k, v in en.items() if v])
+            write_parquet(df, "monolingual", "eng")
+            print(f"  built monolingual::eng  ({len(df):,} rows)")
+            del df
+        prog["monolingual"].append("eng")
+        save_build_progress(prog)
+
+    for idx, code in enumerate(all_langs, 1):
+        versions = by_lang[code]
+        par_done  = code in prog["parallel"]
+        mono_done = code in prog["monolingual"]
+        if par_done and mono_done:
+            continue
+
+        pairs = load_local_for_lang(code, versions)
+        if not pairs:
+            if not par_done:
+                prog["parallel"].append(code)
+            if not mono_done:
+                prog["monolingual"].append(code)
+            save_build_progress(prog)
+            continue
+
+        if not par_done:
+            df = build_parallel_df(code, pairs, pivots)
+            if df is not None:
+                write_parquet(df, "parallel", code)
+                print(f"  [{idx}/{total}] parallel::{code}  {len(df):,} rows")
+                del df
+            prog["parallel"].append(code)
+            save_build_progress(prog)
+
+        if not mono_done:
+            df = build_mono_df(pairs)
+            if df is not None:
+                write_parquet(df, "monolingual", code)
+                print(f"  [{idx}/{total}] monolingual::{code}  {len(df):,} rows")
+                del df
+            prog["monolingual"].append(code)
+            save_build_progress(prog)
+
+        del pairs
+
+    print(f"\nPhase 1 done — parquets in {os.path.abspath(BUILD_DIR)}")
+
+
+# ─────────────────────────────────────────────
+# PHASE 2 — BULK UPLOAD
+# ─────────────────────────────────────────────
+
+def phase_push(namespace, par_name, mono_name, private, token):
     from huggingface_hub import HfApi
-    token = os.environ.get("HF_TOKEN")
-    HfApi().create_repo(repo_id, repo_type="dataset", private=private,
+    api = HfApi()
+
+    for dataset, name in [("parallel", par_name), ("monolingual", mono_name)]:
+        repo_id  = f"{namespace}/{name}"
+        data_dir = os.path.join(BUILD_DIR, dataset)
+        if not os.path.exists(data_dir):
+            print(f"  {dataset}: no build dir found, skipping")
+            continue
+
+        configs = [
+            d for d in os.listdir(os.path.join(data_dir, "data"))
+            if os.path.isdir(os.path.join(data_dir, "data", d))
+        ] if os.path.exists(os.path.join(data_dir, "data")) else []
+
+        desc = (
+            "African-language Bible verses paired with English, French, Arabic, "
+            "Chinese, and Portuguese translations."
+            if dataset == "parallel" else
+            "African-language Bible verses — monolingual text per language, "
+            "plus an English (CEB) subset."
+        )
+        write_dataset_card(data_dir, repo_id, configs, desc)
+
+        print(f"\nPushing {repo_id}  ({len(configs)} configs) ...")
+        api.create_repo(repo_id, repo_type="dataset", private=private,
                         exist_ok=True, token=token)
-    for cfg, df in sorted(frames.items()):
-        print(f"  push {repo_id} :: {cfg}  ({len(df)} rows)")
-        Dataset.from_pandas(df, preserve_index=False).push_to_hub(
-            repo_id, config_name=cfg, token=token, private=private)
+        api.upload_large_folder(
+            folder_path=data_dir,
+            repo_id=repo_id,
+            repo_type="dataset",
+            token=token,
+        )
+        print(f"  Done -> https://huggingface.co/datasets/{repo_id}")
 
 
 # ─────────────────────────────────────────────
@@ -194,46 +309,33 @@ def push(frames, repo_id, private):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--namespace", default="afrispeech")
-    ap.add_argument("--parallel-name", default="african-bible-parallel")
-    ap.add_argument("--mono-name", default="african-bible-monolingual")
-    ap.add_argument("--langs", nargs="*", default=None,
-                    help="restrict to these lang_codes")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="build parquet locally, do not upload")
+    ap.add_argument("--namespace", default="michsethowusu")
+    ap.add_argument("--parallel-name",  default="african-bible-parallel")
+    ap.add_argument("--mono-name",      default="african-bible-monolingual")
+    ap.add_argument("--langs", nargs="*", default=None)
+    ap.add_argument("--build-only", action="store_true", help="Phase 1 only")
+    ap.add_argument("--push-only",  action="store_true", help="Phase 2 only (parquets must exist)")
     ap.add_argument("--private", action="store_true")
     args = ap.parse_args()
 
+    token = os.environ.get("HF_TOKEN")
     langs_filter = set(args.langs) if args.langs else None
 
-    print("Loading version metadata ...")
-    by_id, _ = load_versions_meta(VERSIONS_CSV)
-    print("Loading pivot caches ...")
-    pivots = load_pivots()
-    print("Collecting local verses ...")
-    local_rows = collect_local_rows(by_id, langs_filter)
-    print(f"  languages with scraped text: {len(local_rows)}")
+    if not args.push_only:
+        print("=== Phase 1: Building parquets locally ===")
+        print("Loading version metadata ...")
+        by_lang = load_versions_meta(VERSIONS_CSV)
+        print("Loading pivot caches ...")
+        pivots = load_pivots()
+        prog = load_build_progress()
+        phase_build(by_lang, pivots, langs_filter, prog)
 
-    print("\nBuilding PARALLEL frames ...")
-    par = build_parallel(local_rows, pivots)
-    print(f"  parallel configs: {len(par)}")
-    print("Building MONOLINGUAL frames ...")
-    mono = build_monolingual(local_rows, pivots)
-    print(f"  monolingual configs: {len(mono)}")
+    if not args.build_only:
+        print("\n=== Phase 2: Bulk upload to HuggingFace ===")
+        phase_push(args.namespace, args.parallel_name, args.mono_name,
+                   args.private, token)
 
-    if args.dry_run:
-        write_local(par, "parallel")
-        write_local(mono, "monolingual")
-        print("\nDry run complete — nothing uploaded.")
-        return
-
-    par_repo  = f"{args.namespace}/{args.parallel_name}"
-    mono_repo = f"{args.namespace}/{args.mono_name}"
-    print(f"\nPushing parallel -> {par_repo}")
-    push(par, par_repo, args.private)
-    print(f"Pushing monolingual -> {mono_repo}")
-    push(mono, mono_repo, args.private)
-    print("\nDone.")
+    print("\nAll done!")
 
 
 if __name__ == "__main__":

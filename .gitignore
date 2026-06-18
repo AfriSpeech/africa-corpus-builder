@@ -1,7 +1,11 @@
-# scraped datasets (too large for git; push to HF instead)
+# scraped datasets (too large for git; hosted on HF)
 african_bible_parallel_text_datasets/
 pivots/
 hf_build/
+
+# build/push state
+build_progress.json
+push_progress.json
 
 # logs and pilot files
 *.log
