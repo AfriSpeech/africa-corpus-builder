@@ -111,14 +111,13 @@ def main():
     api.create_repo(repo_id=repo_id, repo_type=HF_REPO_TYPE,
                     exist_ok=True, private=False)
 
-    print(f"Uploading {len(to_upload)} file(s) ...")
-    api.upload_folder(
+    print(f"Uploading {len(to_upload)} file(s) via upload_large_folder ...")
+    # ignore_patterns excludes run-state files that should never be on HF
+    api.upload_large_folder(
         repo_id=repo_id,
         repo_type=HF_REPO_TYPE,
         folder_path=DATA_ROOT,
-        allow_patterns=to_upload,
-        commit_message=("Sync Africa corpus data" if sync
-                        else f"Add {len(to_upload)} new corpus file(s)"),
+        ignore_patterns=["progress.json", "progress.json.tmp", "testament_status.json"],
     )
     print(f"\nDone: https://huggingface.co/datasets/{repo_id}")
 
