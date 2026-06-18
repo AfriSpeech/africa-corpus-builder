@@ -41,7 +41,7 @@ near-zero extra requests across the whole run. **No Chrome / Selenium required.*
 ### Clone and run
 
 ```bash
-git clone https://github.com/ghananlpcommunity/africa-mt-builder.git
+git clone https://github.com/michsethowusu/africa-mt-builder.git
 cd africa-mt-builder
 
 # Scrape every version listed in the default CSV:
