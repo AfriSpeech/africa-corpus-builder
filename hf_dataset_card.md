@@ -61,7 +61,7 @@ multilinguality:
 
 # Africa Corpus
 
-Verse-aligned text for **792+ African languages**, plus several world languages,
+Verse-aligned text for **693 African languages**, plus several world languages,
 for building **parallel** and **monolingual** corpora. Every language is aligned
 on a shared verse key, so any two languages can be joined into a parallel corpus:
 
@@ -123,7 +123,7 @@ Bible version id, so each file is self-describing.
 
 ## Coverage
 
-1,090 Bible versions across 792+ African languages, covering all major African
+949 Bible versions across 693 African languages, covering all major African
 language families: Niger-Congo, Afro-Asiatic, Nilo-Saharan, Khoisan, and
 Austronesian (Madagascar). Total verse records: ~16 million.
 

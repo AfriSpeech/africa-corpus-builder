@@ -829,7 +829,7 @@ Languages are referenced by code (`swc`, `yor`, `fr`) or by name
 
 ## Available languages
 
-**African languages** — 792+ languages across the continent are available. Run
+**African languages** — 693 languages across the continent are available. Run
 `python africa_corpus.py --list` to see all codes and names.
 
 **Reference languages** that can be used as the non-African side of a parallel corpus:
@@ -869,7 +869,7 @@ to commit.
 
 ## Coverage
 
-The dataset covers **1,090 Bible versions across 792+ African languages**,
+The dataset covers **949 Bible versions across 693 African languages**,
 sourced from [YouVersion](https://www.bible.com) and cross-referenced against
 [Glottolog](https://glottolog.org)'s Africa macroarea.
 
