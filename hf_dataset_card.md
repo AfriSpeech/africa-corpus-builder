@@ -123,7 +123,7 @@ Bible version id, so each file is self-describing.
 
 ## Coverage
 
-949 Bible versions across 693 African languages, covering all major African
+693 African languages, covering all major African
 language families: Niger-Congo, Afro-Asiatic, Nilo-Saharan, Khoisan, and
 Austronesian (Madagascar). Total verse records: ~16 million.
 
