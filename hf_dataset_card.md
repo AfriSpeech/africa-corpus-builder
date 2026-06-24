@@ -127,8 +127,21 @@ Bible version id, so each file is self-describing.
 language families: Niger-Congo, Afro-Asiatic, Nilo-Saharan, Khoisan, and
 Austronesian (Madagascar). Total verse records: ~16 million.
 
-Reference languages available as parallel targets: English (CEB), French (LSG),
-Arabic (AVD), Chinese (CUNPSS), Portuguese (ARA).
+Reference languages available as parallel targets, each with **several Bible
+versions** (a classic plus contemporary modern-language translations):
+
+| Code | Language | Versions |
+|---|---|---|
+| `en` | English | CEB, ERV, CEV, GNT |
+| `fr` | French | LSG, Semeur (BDS), Parole de Vie, Segond 21 |
+| `ar` | Arabic | AVD, NAV, GNA, SAT |
+| `zh` | Chinese | CUNPSS, CCB, CNVS, CSBS |
+| `pt` | Portuguese | ARA, NVT, NTLH, NVI |
+
+By default the library merges all versions of a reference language, so each
+African verse is paired with every available rendering (more paraphrases). Pin
+one version with `@<id>` (e.g. `--target en@406` for ERV). Version ids are the
+`v{id}` in each `reference_caches/` filename.
 
 ## Source & license
 
