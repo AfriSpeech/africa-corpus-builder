@@ -829,13 +829,26 @@ Languages are referenced by code (`swc`, `yor`, `fr`) or by name
 
 **Reference languages** that can be used as the non-African side of a parallel corpus:
 
-| Code | Language | Version |
+| Code | Language | Versions |
 |---|---|---|
-| `en` | English | CEB (v37) |
-| `fr` | French | LSG (v93) |
-| `ar` | Arabic | AVD (v13) |
-| `zh` | Chinese | CUNPSS (v48) |
-| `pt` | Portuguese | ARA (v1608) |
+| `en` | English | CEB, ERV, CEV, GNT |
+| `fr` | French | LSG, Semeur (BDS), Parole de Vie, Segond 21 |
+| `ar` | Arabic | AVD, NAV, GNA, SAT |
+| `zh` | Chinese | CUNPSS, CCB, CNVS, CSBS |
+| `pt` | Portuguese | ARA, NVT, NTLH, NVI |
+
+Each reference language has **several Bible versions**, including contemporary
+modern-language translations. By default all versions are merged, so an African
+verse is paired with **every** available rendering — many more paraphrases. To
+pin a single version, append `@<version_id>`:
+
+```bash
+python africa_corpus.py --source swc --target en          # all English versions (most paraphrases)
+python africa_corpus.py --source swc --target en@406      # only ERV (Easy-to-Read)
+python africa_corpus.py --source yor --target fr@21       # only Bible du Semeur
+```
+
+Version ids are the `v{id}` in each `reference_caches/` filename.
 
 ### Adding more reference languages
 
