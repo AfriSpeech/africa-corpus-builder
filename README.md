@@ -1,7 +1,7 @@
 # Africa Corpus Builder
 
 A toolkit and small Python library for **retrieving monolingual and parallel
-text corpora for African languages**. Pull a monolingual corpus for any single
+text corpora for 693 African languages**. Pull a monolingual corpus for any single
 African language, or pair one with English, with another African language, or
 with one of several other world languages. Output is clean, sentence-aligned
 CSV, ready for machine-translation training and NLP research.
