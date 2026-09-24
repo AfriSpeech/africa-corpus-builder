@@ -34,8 +34,11 @@ makes African ↔ African and African ↔ other-language pairs possible.
 
 **693 African languages**, **15,974,671 sentences** in total. Sentences = harvested verses available for alignment.
 
+<details>
+<summary>Click to show the full language list</summary>
+
 | Language | Code | Sentences |
-|---|---|--:|
+|---|---|---|
 | Swahili | swh | 356,708 |
 | Afrikaans | afr | 279,114 |
 | Shona | sna | 224,417 |
@@ -729,6 +732,8 @@ makes African ↔ African and African ↔ other-language pairs possible.
 | Wannu | jub | 1,071 |
 | Lubila | kcc | 1,068 |
 | Bullom So | buy | 1,066 |
+
+</details>
 
 ---
 
