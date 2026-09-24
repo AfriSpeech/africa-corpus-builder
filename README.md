@@ -26,13 +26,14 @@ no code change or update needed.
 | African ↔ other language | Twi ↔ French, Zulu ↔ Arabic | French, Arabic, Chinese, Portuguese are cached |
 | Monolingual | all Swahili sentences | any single language |
 
-Every language's text is aligned on a shared verse key, so **any** two
-languages can be turned into a parallel corpus by a simple join. That is what
-makes African ↔ African and African ↔ other-language pairs possible.
+Every language's text is aligned on a shared key, so **any** two languages
+within a data source can be turned into a parallel corpus by a simple join.
+That is what makes African ↔ African and African ↔ other-language pairs
+possible.
 
 ## Dataset statistics
 
-**693 African languages**, **15,974,671 sentences** in total. Sentences = harvested verses available for alignment.
+**693 African languages**, **15,974,671 sentences** in total. Sentences = harvested records available for alignment.
 
 <details>
 <summary>Click to show the full language list</summary>
@@ -745,10 +746,10 @@ repo following that convention with the `AFRICA_CORPUS_REPO` environment
 variable (default: `AfriSpeech/africa-corpus`):
 
 ```bash
-# default Bible-derived corpora (parallel + monolingual, verse-key aligned)
+# default Bible-derived corpora (parallel + monolingual, key-aligned)
 export AFRICA_CORPUS_REPO=AfriSpeech/africa-corpus
 
-# watchtower literature (parallel + monolingual, shared verse keys across languages)
+# watchtower literature (parallel + monolingual, shared keys across languages)
 export AFRICA_CORPUS_REPO=AfriSpeech/african-corpus-jw
 
 # MADLAD-400 African subset (monolingual only — synthetic per-document keys)
@@ -758,10 +759,10 @@ export AFRICA_CORPUS_REPO=AfriSpeech/madlad-91-african
 | Source repo | Content | Parallel alignable | `@{version}` |
 |---|---|---|---|
 | [`AfriSpeech/africa-corpus`](https://huggingface.co/datasets/AfriSpeech/africa-corpus) | 693 languages, ~16 M Bible verses | ✔ English / African / French, Arabic, Chinese, Portuguese | Bibles per language |
-| [`AfriSpeech/african-corpus-jw`](https://huggingface.co/datasets/AfriSpeech/african-corpus-jw) | 129 African languages, watchtower literature | ✔ same verse keys across languages | single version each |
+| [`AfriSpeech/african-corpus-jw`](https://huggingface.co/datasets/AfriSpeech/african-corpus-jw) | 129 African languages, watchtower literature | ✔ same keys across languages | single version each |
 | [`AfriSpeech/madlad-91-african`](https://huggingface.co/datasets/AfriSpeech/madlad-91-african) | 85 African languages, ~60 GB web text | ✗ (unique keys per document) | `@1` clean / `@2` noisy |
 
-`madlad-91-african` has no shared verse keys, so `parallel()` / `--target`
+`madlad-91-african` has no shared keys, so `parallel()` / `--target`
 return nothing for it — use `--monolingual` only. `sw@1` selects its clean
 split, `sw@2` its noisy split.
 
@@ -842,7 +843,7 @@ python africa_corpus.py --source all --monolingual --out-dir corpora/
 import africa_corpus as ac
 
 ac.list_languages()                               # (african, reference) language lists
-rows  = ac.parallel("swc", "en", limit=1000)      # [(verse_key, swc, en), ...]
+rows  = ac.parallel("swc", "en", limit=1000)      # [(shared_key, swc, en), ...]
 rows  = ac.parallel("twi", "yor")                 # twi ↔ Yoruba
 sents = ac.monolingual("hau", limit=500, sample=True)
 
@@ -876,7 +877,7 @@ Languages are referenced by code (`swc`, `yor`, `fr`) or by name
 
 Each reference language has **several Bible versions**, including contemporary
 modern-language translations. By default all versions are merged, so an African
-verse is paired with **every** available rendering — many more paraphrases. To
+text is paired with **every** available rendering — many more paraphrases. To
 pin a single version, append `@<version_id>`:
 
 ```bash
@@ -919,7 +920,7 @@ sourced from [YouVersion](https://www.bible.com) and cross-referenced against
 [Glottolog](https://glottolog.org)'s Africa macroarea.
 
 Languages span all major African language families: Niger-Congo, Afro-Asiatic,
-Nilo-Saharan, Khoisan, and Austronesian (Madagascar). Total verse records: ~16
+Nilo-Saharan, Khoisan, and Austronesian (Madagascar). Total keyed records: ~16
 million.
 
 ---
