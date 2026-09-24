@@ -6,11 +6,14 @@ African language, or pair one with English, with another African language, or
 with one of several other world languages. Output is clean, sentence-aligned
 CSV, ready for machine-translation training and NLP research.
 
-The corpora are hosted on HuggingFace at
-[`AfriSpeech/africa-corpus`](https://huggingface.co/datasets/AfriSpeech/africa-corpus).
-The library downloads only the files you actually use and caches them locally,
-so the repository itself stays lightweight. New languages pushed to the dataset
-are picked up automatically — no code change or update needed.
+The corpora are hosted on HuggingFace. The default source is
+[`AfriSpeech/africa-corpus`](https://huggingface.co/datasets/AfriSpeech/africa-corpus),
+but any dataset repo that uses the same file convention can be selected via the
+`AFRICA_CORPUS_REPO` environment variable (see
+[Data sources](#data-sources)). The library downloads only the files you
+actually use and caches them locally, so the repository itself stays
+lightweight. New languages pushed to a dataset are picked up automatically —
+no code change or update needed.
 
 ---
 
@@ -726,6 +729,36 @@ makes African ↔ African and African ↔ other-language pairs possible.
 | Wannu | jub | 1,071 |
 | Lubila | kcc | 1,068 |
 | Bullom So | buy | 1,066 |
+
+---
+
+## Data sources
+
+The builder discovers languages automatically from the top-level
+`{Name}_{code}_v{id}.csv` files of a HuggingFace dataset repo. Point it at any
+repo following that convention with the `AFRICA_CORPUS_REPO` environment
+variable (default: `AfriSpeech/africa-corpus`):
+
+```bash
+# default Bible-derived corpora (parallel + monolingual, verse-key aligned)
+export AFRICA_CORPUS_REPO=AfriSpeech/africa-corpus
+
+# watchtower literature (parallel + monolingual, shared verse keys across languages)
+export AFRICA_CORPUS_REPO=AfriSpeech/african-corpus-jw
+
+# MADLAD-400 African subset (monolingual only — synthetic per-document keys)
+export AFRICA_CORPUS_REPO=AfriSpeech/madlad-91-african
+```
+
+| Source repo | Content | Parallel alignable | `@{version}` |
+|---|---|---|---|
+| [`AfriSpeech/africa-corpus`](https://huggingface.co/datasets/AfriSpeech/africa-corpus) | 693 languages, ~16 M Bible verses | ✔ English / African / French, Arabic, Chinese, Portuguese | Bibles per language |
+| [`AfriSpeech/african-corpus-jw`](https://huggingface.co/datasets/AfriSpeech/african-corpus-jw) | 129 African languages, watchtower literature | ✔ same verse keys across languages | single version each |
+| [`AfriSpeech/madlad-91-african`](https://huggingface.co/datasets/AfriSpeech/madlad-91-african) | 85 African languages, ~60 GB web text | ✗ (unique keys per document) | `@1` clean / `@2` noisy |
+
+`madlad-91-african` has no shared verse keys, so `parallel()` / `--target`
+return nothing for it — use `--monolingual` only. `sw@1` selects its clean
+split, `sw@2` its noisy split.
 
 ---
 
